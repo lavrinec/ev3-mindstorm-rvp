@@ -1,0 +1,15 @@
+{
+    // Tu vpisite geslo za uporabnika "robot"
+    "ev3devBrowser.password": "im",
+    // Da se izognemo "gneci", lahko povemo podatke za povezavo.
+    "ev3devBrowser.additionalDevices": [
+        {
+            "name": "ev3-i-m", // hostname naprave
+            "ipAddress": "192.168.0.238"
+        }
+    ],
+    "files.eol": "\n",
+    "ev3devBrowser.download.exclude": "{**/.*,LICENSE,README.md}",
+    "terminal.integrated.shell.windows": "cmd.exe",
+    "python.pythonPath": ".venv/bin/python3"
+}
