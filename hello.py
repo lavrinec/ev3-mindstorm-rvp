@@ -56,6 +56,8 @@ def main():
     gyro.mode='GYRO-ANG'
     color.mode='COL-COLOR'
 
+    # TODO read and process 192.168.0.100/zemljevid.json
+
     set_font('Lat15-Terminus24x12')
 
     # print something to the screen of the device
@@ -68,7 +70,7 @@ def main():
 
     # wait a bit so you have time to look at the display before the program
     # exits
-    # time.sleep(2)
+    # time.sleep(2)e
 
     readAngle()
     turn(True)
@@ -99,12 +101,13 @@ def moveForward(time):
     rightWheel.run_timed(time_sp=time, speed_sp=500)
 
 def turn(left):
-    speed = 250
-    milis = 1500
-    if(left):
-        rightWheel.run_timed(time_sp=milis, speed_sp=speed)
-    else:
-        leftWheel.run_timed(time_sp=milis, speed_sp=speed)
+    speedLeft = 250 * (left and -1 or 1)
+    speedRight = speedLeft * -1
+    milis = 640
+
+    leftWheel.run_timed(time_sp=milis, speed_sp=speedLeft)
+    rightWheel.run_timed(time_sp=milis, speed_sp=speedRight)
+
     time.sleep(milis/1000)
 
 def readAngle():
