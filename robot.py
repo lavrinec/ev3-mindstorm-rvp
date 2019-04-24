@@ -20,6 +20,10 @@ start = None
 saving = []
 wheelCirc = 0.17593 # in meters
 
+integral = 0
+e_old = 0
+t_old = time.time()
+
 # Print debug messages to stderr
 def debug_print(*args, **kwargs):
     print(*args, **kwargs, file=sys.stderr)
@@ -93,22 +97,27 @@ def main():
     reset_gyro()
     read_map()
 
+    leftWheel.ramp_up_sp = 1000
+    rightWheel.ramp_up_sp = 1000
+
     go_rescue()
 
     # print something to the output panel in VS Code
-    debug_print('Hello VS Code!')
-
-integral = 0
-e_old = 0
-t_old = time.time()
+    debug_print('Bye bye!')
 
 def reset_for_pid():
+    global e_old
+    global integral
+    global t_old
     integral = 0
     e_old = 0
     t_old = time.time()
 
 # PID
 def pid(Kp, Ki, Kd, angle_wanted):
+    global e_old
+    global integral
+    global t_old
     angle = read_angle()
     t = time.time()
     e = angle_wanted + angle
@@ -126,83 +135,67 @@ def pid(Kp, Ki, Kd, angle_wanted):
 
     return u
 
-"""
-# PID
-def pid(Kp, Ki, Kd, angle_wanted, max_speed, drive_m):
-    integral = 0
-    e_old = 0
-    counter = 0
-    t_old = time.time()
-    leftWheel.position = 0
+# stop all motors
+def stop_motors():
+    leftWheel.stop(stop_action='hold')
+    rightWheel.stop(stop_action='hold')
+    time.sleep(2)
+    reset_gyro()
+    time.sleep(2)
 
-    while True:
-        angle = read_angle()
-        t = time.time()
-        e = angle_wanted + angle
-        delta_e = e - e_old
-        delta_t = t - t_old
-        
-        P = Kp * e
-        I = Ki * integral
-        D = Kd * delta_e / delta_t
-        u = P + I + D
-
-        e_old = e
-        t_old = t
-        integral += e * delta_t
-
-        if u > max_speed:
-            u = max_speed
-        if u < -max_speed:
-            u = -max_speed
-
-        if drive_m == 0:
-            leftWheel.speed_sp = u * -1
-            rightWheel.speed_sp = u
-        else:
-            leftWheel.speed_sp = max_speed + u
-            rightWheel.speed_sp = max_speed - u
-
-        leftWheel.run_forever(ramp_up_sp=3000)
-        rightWheel.run_forever(ramp_up_sp=3000)
-
-        finish = False
-
-        if drive_m == 0:
-            if angle == angle_wanted * -1:
-                counter += 1
-            else:
-                counter = 0
-            
-            if counter > 10:
-                finish = True
-        elif abs(leftWheel.position * wheelCirc/360) > abs(drive_m):
-            finish = True
-
-        debug_print('e', e, 'finish', finish, 'u', u)
-        
-        if finish:
-            leftWheel.stop(stop_action='brake')
-            rightWheel.stop(stop_action='brake')
-            time.sleep(2)
-            reset_gyro()
-            time.sleep(2)
-            break
-"""
 
 # turning left or right
 def turn(left):
     cilj = -90
+    counter = 0
     if left:
         cilj = 90
-    pid(5,0,0, cilj)
+    speed_base = 300
+    reset_for_pid()
+    while True:
+        u = pid(5,0,0,cilj)
+
+        if u > speed_base:
+            u = speed_base
+        if u < -speed_base:
+            u = -speed_base
+
+        leftWheel.run_forever(speed_sp= -u)
+        rightWheel.run_forever(speed_sp= u)
+
+        angle = read_angle()
+        if angle == -cilj:
+            counter += 1
+        else:
+            counter = 0
+
+        # debug_print(angle, cilj, counter)
+
+        if counter > 10:
+            stop_motors()
+            break
 
 
 # going forward for cm
 def drive_cm(cm):
-    # TODO implement
-    debug_print('TODO')
-    pid(5,0,0, 0)
+    speed_base = 500
+    reset_for_pid()
+    leftWheel.position = 0
+
+    while True:
+        u = pid(8,1,0,0)
+
+        if u > speed_base:
+            u = speed_base
+        if u < -speed_base:
+            u = -speed_base
+
+        leftWheel.run_forever(speed_sp=speed_base - u)
+        rightWheel.run_forever(speed_sp=speed_base + u)
+
+        if abs(leftWheel.position * wheelCirc/3.60) > abs(cm):
+            stop_motors()
+            break
 
 
 # go to coordinates
