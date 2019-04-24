@@ -69,8 +69,9 @@ def read_color():
 # read and parse map
 def read_map():
     # url = "http://192.168.0.100/zemljevid.json"
-    url = "http://192.168.1.86/zemljevid.json"
-    url = "http://192.168.2.5/zemljevid.json"
+    # url = "http://192.168.1.86/zemljevid.json"
+    # url = "http://192.168.2.5/zemljevid.json"
+    url = "http://192.168.0.200:8080/zemljevid.json"
     r = urlopen(url)
     data = json.loads(r.read().decode(r.info().get_param('charset') or 'utf-8'))
     position = data["start"]
@@ -97,7 +98,35 @@ def main():
     # print something to the output panel in VS Code
     debug_print('Hello VS Code!')
 
+integral = 0
+e_old = 0
+t_old = time.time()
 
+def reset_for_pid():
+    integral = 0
+    e_old = 0
+    t_old = time.time()
+
+# PID
+def pid(Kp, Ki, Kd, angle_wanted):
+    angle = read_angle()
+    t = time.time()
+    e = angle_wanted + angle
+    delta_e = e - e_old
+    delta_t = t - t_old
+    
+    P = Kp * e
+    I = Ki * integral
+    D = Kd * delta_e / delta_t
+    u = P + I + D
+
+    e_old = e
+    t_old = t
+    integral += e * delta_t
+
+    return u
+
+"""
 # PID
 def pid(Kp, Ki, Kd, angle_wanted, max_speed, drive_m):
     integral = 0
@@ -120,7 +149,7 @@ def pid(Kp, Ki, Kd, angle_wanted, max_speed, drive_m):
 
         e_old = e
         t_old = t
-        integral = integral + e * delta_t
+        integral += e * delta_t
 
         if u > max_speed:
             u = max_speed
@@ -132,7 +161,7 @@ def pid(Kp, Ki, Kd, angle_wanted, max_speed, drive_m):
             rightWheel.speed_sp = u
         else:
             leftWheel.speed_sp = max_speed + u
-            rightWheel.speed_sp = max_speed + u * -1
+            rightWheel.speed_sp = max_speed - u
 
         leftWheel.run_forever(ramp_up_sp=3000)
         rightWheel.run_forever(ramp_up_sp=3000)
@@ -159,20 +188,21 @@ def pid(Kp, Ki, Kd, angle_wanted, max_speed, drive_m):
             reset_gyro()
             time.sleep(2)
             break
+"""
 
 # turning left or right
 def turn(left):
     cilj = -90
     if left:
         cilj = 90
-    pid(5,0,0, cilj, 100, 0)
+    pid(5,0,0, cilj)
 
 
 # going forward for cm
 def drive_cm(cm):
     # TODO implement
     debug_print('TODO')
-    pid(5,5,0, 0, 500, cm/100)
+    pid(5,0,0, 0)
 
 
 # go to coordinates
@@ -190,7 +220,7 @@ def go_rescue():
         robot_go_to(person)
         color = read_color()
         turn(len(saving) % 2 == 0)
-        drive_cm(20)
+        drive_cm(40)
         if color == 1 or color == 2: # alive or damaged
             robot_go_to(start)
         
