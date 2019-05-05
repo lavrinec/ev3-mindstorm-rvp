@@ -24,6 +24,11 @@ integral = 0
 e_old = 0
 t_old = time.time()
 
+# robot position on the grid
+ev3x = 0
+ev3y = 0
+ev3Facing = 'n' # north, south, east, west orientation
+
 # Print debug messages to stderr
 def debug_print(*args, **kwargs):
     print(*args, **kwargs, file=sys.stderr)
@@ -66,12 +71,13 @@ def reset_gyro():
 def read_color():
     col = color.value()
     print("Barva: ", col)
-    debug_print("Barva: ", col)
+    # debug_print("Barva: ", col)
     return col
 
 
 # read and parse map
 def read_map():
+    """
     # url = "http://192.168.0.100/zemljevid.json"
     # url = "http://192.168.1.86/zemljevid.json"
     # url = "http://192.168.2.5/zemljevid.json"
@@ -85,25 +91,17 @@ def read_map():
     saving.append(data["oseba3"])
     saving.append(data["oseba4"])
     debug_print(data)
-
-
-# The main function of our program'
-def main():
-    # set the console just how we want it
-    reset_console()
-    set_cursor(OFF)
-    set_font('Lat15-Terminus24x12')
-
-    reset_gyro()
-    read_map()
-
-    leftWheel.ramp_up_sp = 1000
-    rightWheel.ramp_up_sp = 1000
-
-    go_rescue()
-
-    # print something to the output panel in VS Code
-    debug_print('Bye bye!')
+    """
+    #map ni na voljo, naredi svoj primer
+    global start
+    start = [0,0]
+    saving.append([0,4])
+    # saving.append([3,3])
+    saving.append([4,1])
+    global ev3x
+    ev3x = start[0]
+    global ev3y
+    ev3y = start[1]
 
 def reset_for_pid():
     global e_old
@@ -118,9 +116,9 @@ def pid(Kp, Ki, Kd, angle_wanted):
     global e_old
     global integral
     global t_old
-    angle = read_angle()
+    angle = -read_angle()
     t = time.time()
-    e = angle_wanted + angle
+    e = angle_wanted - angle
     delta_e = e - e_old
     delta_t = t - t_old
     
@@ -133,15 +131,17 @@ def pid(Kp, Ki, Kd, angle_wanted):
     t_old = t
     integral += e * delta_t
 
+    #debug_print(angle," ",e," ",t)
+
     return u
 
 # stop all motors
 def stop_motors():
     leftWheel.stop(stop_action='hold')
     rightWheel.stop(stop_action='hold')
-    time.sleep(2)
+    time.sleep(0.5)
     reset_gyro()
-    time.sleep(2)
+    time.sleep(0)
 
 
 # turning left or right
@@ -150,10 +150,13 @@ def turn(left):
     counter = 0
     if left:
         cilj = 90
+        debug_print("obracam levo")
+    else:
+        debug_print("obracam desno")
     speed_base = 300
     reset_for_pid()
     while True:
-        u = pid(5,0,0,cilj)
+        u = pid(5,0,0,cilj) #pid(5,0,0,cilj)
 
         if u > speed_base:
             u = speed_base
@@ -164,12 +167,15 @@ def turn(left):
         rightWheel.run_forever(speed_sp= u)
 
         angle = read_angle()
+
+        # t = time.time()
+        # debug_print(angle," ",t)
         if angle == -cilj:
-            counter += 1
+           # stop_motors()
+           # break
+           counter += 1
         else:
             counter = 0
-
-        # debug_print(angle, cilj, counter)
 
         if counter > 10:
             stop_motors()
@@ -178,18 +184,21 @@ def turn(left):
 
 # going forward for cm
 def drive_cm(cm):
-    speed_base = 500
+    debug_print("peljem naprej za ", cm, "cm")
+    speed_base = 300
     reset_for_pid()
     leftWheel.position = 0
+    # rightWheel.position = 0
 
     while True:
-        u = pid(8,1,0,0)
+        u = pid(8,1,0,0) #pid(8,1,0,0)
 
         if u > speed_base:
             u = speed_base
         if u < -speed_base:
             u = -speed_base
 
+        # mogoce le nastavi speed brez se enega klica run_forever
         leftWheel.run_forever(speed_sp=speed_base - u)
         rightWheel.run_forever(speed_sp=speed_base + u)
 
@@ -198,25 +207,119 @@ def drive_cm(cm):
             break
 
 
-# go to coordinates
-def robot_go_to(coordinate):
-    # TODO implement
-    debug_print('TODO')
-    # TODO turn to right direction and drive cm
+# go to coordinates of person
+def robot_go_to(person):
+    global ev3x
+    global ev3y
+    global ev3Facing
+
+    debug_print("sem na [",ev3x,",",ev3y,"] obrnjen proti ",ev3Facing)
+    debug_print("tarca je na ",person)
+
+    # get required moves from ev3 pos to person
+    moveX = person[0] - ev3x
+    moveY = person[1] - ev3y
+
+    debug_print("moja pot je: x ", moveX," y ",moveY)
+
+    # rotate for appropriate y direction
+    if moveY > 0: # person is to the south
+        debug_print("tarca je proti jugu")
+        if ev3Facing == 'n':
+            turn(True)
+            ev3Facing = 'w'
+            turn(True)
+        elif ev3Facing == 'w':
+            turn(True)
+        elif ev3Facing == 'e':
+            turn(False)
+        ev3Facing = 's'
+    
+    if moveY < 0: # person is to the north
+        debug_print("tarca je proti severu")
+        if ev3Facing == 's':
+            turn(True)
+            ev3Facing = 'e'
+            turn(True)
+        elif ev3Facing == 'e':
+            turn(True)
+        elif ev3Facing == 'w':
+            turn(False)
+        ev3Facing = 'n'
+
+    # move square by square in y direction
+    for y in range(0, abs(moveY)):
+        debug_print("sem na [",ev3x,",",ev3y,"] obrnjen proti ",ev3Facing)
+        drive_cm(10)
+        if moveY < 0:
+            ev3y = ev3y - 1
+        else:
+            ev3y = ev3y + 1
+
+    # rotate for appropriate x direction
+    if moveX < 0: # person is to the west
+        debug_print("tarca je proti zahodu")
+        if ev3Facing == 'e':
+            turn(True)
+            ev3Facing = 'n'
+            turn(True)
+        elif ev3Facing == 'n':
+            turn(True)
+        elif ev3Facing == 's':
+            turn(False)
+        ev3Facing = 'w'
+    
+    if moveX > 0: # person is to the east
+        debug_print("tarca je proti vzhodu")
+        if ev3Facing == 'w':
+            turn(True)
+            ev3Facing = 's'
+            turn(True)
+        elif ev3Facing == 's':
+            turn(True)
+        elif ev3Facing == 'n':
+            turn(False)
+        ev3Facing = 'e'
+
+    # move square by square in x direction
+    for x in range(0, abs(moveX)):
+        debug_print("sem na [",ev3x,",",ev3y,"] obrnjen proti ",ev3Facing)
+        drive_cm(10)
+        if moveX < 0:
+            ev3x = ev3x - 1
+        else:
+            ev3x = ev3x + 1
 
 
 # go rescue all people
 def go_rescue():
     while saving:
         person = saving.pop()
-        debug_print(person)
+
         robot_go_to(person)
+
         color = read_color()
-        turn(len(saving) % 2 == 0)
-        drive_cm(40)
-        if color == 1 or color == 2: # alive or damaged
+        if color == 3 or color == 2: # alive or damaged
             robot_go_to(start)
+
         
+# The main function of our program'
+def main():
+    # set the console just how we want it
+    reset_console()
+    set_cursor(OFF)
+    set_font('Lat15-Terminus24x12')
+    print("executing program")
+
+    reset_gyro()
+    read_map()
+
+    leftWheel.ramp_up_sp = 1500
+    rightWheel.ramp_up_sp = 1500
+
+    debug_print("----------RESUJEM---------")
+    go_rescue()
+    robot_go_to(start)
 
 
 if __name__ == '__main__':
