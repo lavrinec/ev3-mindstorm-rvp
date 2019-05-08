@@ -27,7 +27,7 @@ t_old = time.time()
 # robot position on the grid
 ev3x = 0
 ev3y = 0
-ev3Facing = 'e' # north, south, east, west orientation
+ev3Facing = 0 # north, south, east, west orientation
 
 # Print debug messages to stderr
 def debug_print(*args, **kwargs):
@@ -136,6 +136,8 @@ def pid(Kp, Ki, Kd, angle_wanted):
 
     return u
 
+
+
 # stop all motors
 def stop_motors():
     leftWheel.stop(stop_action='hold')
@@ -148,13 +150,16 @@ def stop_motors():
 # turning left or right
 def turn(left):
     cilj = -90
-    counter = 0
     if left:
         cilj = 90
         debug_print("obracam levo")
     else:
         debug_print("obracam desno")
-    speed_base = 300
+    change_angle(cilj)
+
+def change_angle(cilj):
+    counter = 0
+    speed_base = 100
     reset_for_pid()
     while True:
         u = pid(5,0,0,cilj) #pid(5,0,0,cilj)
@@ -182,17 +187,17 @@ def turn(left):
             stop_motors()
             break
 
-
 # going forward for cm
 def drive_cm(cm):
+    global ev3Facing
     debug_print("peljem naprej za ", cm, "cm")
-    speed_base = 300
+    speed_base = 200
     reset_for_pid()
     leftWheel.position = 0
     # rightWheel.position = 0
 
     while True:
-        u = pid(8,1,0,0) #pid(8,1,0,0)
+        u = pid(8,1,0,ev3Facing) #pid(8,1,0,0)
 
         if u > speed_base:
             u = speed_base
@@ -222,35 +227,27 @@ def robot_go_to(person):
     moveY = person[1] - ev3y
 
     debug_print("moja pot je: x ", moveX," y ",moveY)
+    angle = read_angle()
+    print("kot1: ", angle)
 
     # rotate for appropriate y direction
     if moveY > 0: # person is to the south
         debug_print("tarca je proti jugu")
-        if ev3Facing == 'n':
-            turn(True)
-            ev3Facing = 'w'
-            turn(True)
-        elif ev3Facing == 'w':
-            turn(True)
-        elif ev3Facing == 'e':
-            turn(False)
-        ev3Facing = 's'
+        ev3Facing = -90
     
     if moveY < 0: # person is to the north
         debug_print("tarca je proti severu")
-        if ev3Facing == 's':
-            turn(True)
-            ev3Facing = 'e'
-            turn(True)
-        elif ev3Facing == 'e':
-            turn(True)
-        elif ev3Facing == 'w':
-            turn(False)
-        ev3Facing = 'n'
+        ev3Facing = 90
+
+    if moveY != 0:
+        change_angle(ev3Facing)
+
+    print("kot2: ", read_angle())
 
     # move square by square in y direction
     ev3y += moveY
     drive_cm(abs(moveY))
+    print("kot3:", read_angle())
     """
     for y in range(0, int(abs(moveY)/10)):
         debug_print("sem na [",ev3x,",",ev3y,"] obrnjen proti ",ev3Facing)
@@ -264,31 +261,22 @@ def robot_go_to(person):
     # rotate for appropriate x direction
     if moveX < 0: # person is to the west
         debug_print("tarca je proti zahodu")
-        if ev3Facing == 'e':
-            turn(True)
-            ev3Facing = 'n'
-            turn(True)
-        elif ev3Facing == 'n':
-            turn(True)
-        elif ev3Facing == 's':
-            turn(False)
-        ev3Facing = 'w'
+        ev3Facing = 180
     
     if moveX > 0: # person is to the east
         debug_print("tarca je proti vzhodu")
-        if ev3Facing == 'w':
-            turn(True)
-            ev3Facing = 's'
-            turn(True)
-        elif ev3Facing == 's':
-            turn(True)
-        elif ev3Facing == 'n':
-            turn(False)
-        ev3Facing = 'e'
+        ev3Facing = 0
+
+    if moveX != 0:
+        change_angle(ev3Facing)
+
+    print("kot4:", read_angle())
 
     # move square by square in x direction
     ev3x += moveX
     drive_cm(abs(moveX))
+
+    print("kot5:", read_angle())
     """
     for x in range(0, int(abs(moveX)/10)):
         debug_print("sem na [",ev3x,",",ev3y,"] obrnjen proti ",ev3Facing)
@@ -326,8 +314,8 @@ def main():
     reset_gyro()
     read_map()
 
-    leftWheel.ramp_up_sp = 1500
-    rightWheel.ramp_up_sp = 1500
+    leftWheel.ramp_up_sp = 2500
+    rightWheel.ramp_up_sp = 2500
 
     debug_print("----------RESUJEM---------")
     go_rescue()
