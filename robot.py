@@ -27,7 +27,7 @@ t_old = time.time()
 # robot position on the grid
 ev3x = 0
 ev3y = 0
-ev3Facing = 'n' # north, south, east, west orientation
+ev3Facing = 'e' # north, south, east, west orientation
 
 # Print debug messages to stderr
 def debug_print(*args, **kwargs):
@@ -71,13 +71,15 @@ def reset_gyro():
 def read_color():
     col = color.value()
     print("Barva: ", col)
-    # debug_print("Barva: ", col)
+    debug_print("Barva: ", col)
     return col
 
 
 # read and parse map
 def read_map():
-    """
+    global start
+    global ev3x
+    global ev3y
     # url = "http://192.168.0.100/zemljevid.json"
     # url = "http://192.168.1.86/zemljevid.json"
     # url = "http://192.168.2.5/zemljevid.json"
@@ -91,16 +93,15 @@ def read_map():
     saving.append(data["oseba3"])
     saving.append(data["oseba4"])
     debug_print(data)
-    """
     #map ni na voljo, naredi svoj primer
-    global start
+    
+    """
     start = [0,0]
     saving.append([0,4])
     # saving.append([3,3])
     saving.append([4,1])
-    global ev3x
+    """
     ev3x = start[0]
-    global ev3y
     ev3y = start[1]
 
 def reset_for_pid():
@@ -140,7 +141,7 @@ def stop_motors():
     leftWheel.stop(stop_action='hold')
     rightWheel.stop(stop_action='hold')
     time.sleep(0.5)
-    reset_gyro()
+    # reset_gyro()
     time.sleep(0)
 
 
@@ -248,13 +249,17 @@ def robot_go_to(person):
         ev3Facing = 'n'
 
     # move square by square in y direction
-    for y in range(0, abs(moveY)):
+    ev3y += moveY
+    drive_cm(abs(moveY))
+    """
+    for y in range(0, int(abs(moveY)/10)):
         debug_print("sem na [",ev3x,",",ev3y,"] obrnjen proti ",ev3Facing)
         drive_cm(10)
         if moveY < 0:
-            ev3y = ev3y - 1
+            ev3y = ev3y - 10
         else:
-            ev3y = ev3y + 1
+            ev3y = ev3y + 10
+    """
 
     # rotate for appropriate x direction
     if moveX < 0: # person is to the west
@@ -282,13 +287,17 @@ def robot_go_to(person):
         ev3Facing = 'e'
 
     # move square by square in x direction
-    for x in range(0, abs(moveX)):
+    ev3x += moveX
+    drive_cm(abs(moveX))
+    """
+    for x in range(0, int(abs(moveX)/10)):
         debug_print("sem na [",ev3x,",",ev3y,"] obrnjen proti ",ev3Facing)
         drive_cm(10)
         if moveX < 0:
-            ev3x = ev3x - 1
+            ev3x = ev3x - 10
         else:
-            ev3x = ev3x + 1
+            ev3x = ev3x + 10
+    """
 
 
 # go rescue all people
@@ -299,8 +308,11 @@ def go_rescue():
         robot_go_to(person)
 
         color = read_color()
-        if color == 3 or color == 2: # alive or damaged
+        if color == 3 or color == 5 or color == 2: # alive or damaged
+            debug_print("Rescue this one")
             robot_go_to(start)
+        else:
+            debug_print("Dead")
 
         
 # The main function of our program'
