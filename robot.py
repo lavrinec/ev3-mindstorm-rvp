@@ -6,6 +6,7 @@ import time
 import ev3dev.ev3 as ev3
 from urllib.request import urlopen
 import json
+import math
 
 # state constants
 ON = True
@@ -82,8 +83,8 @@ def read_map():
     global ev3y
     # url = "http://192.168.0.100/zemljevid.json"
     # url = "http://192.168.1.86/zemljevid.json"
-    # url = "http://192.168.2.5/zemljevid.json"
-    url = "http://192.168.0.200:8080/zemljevid.json"
+    url = "http://192.168.2.7/zemljevid.json"
+    # url = "http://192.168.0.200:8080/zemljevid.json"
     r = urlopen(url)
     data = json.loads(r.read().decode(r.info().get_param('charset') or 'utf-8'))
     position = data["start"]
@@ -117,7 +118,7 @@ def pid(Kp, Ki, Kd, angle_wanted):
     global e_old
     global integral
     global t_old
-    angle = -read_angle()
+    angle = read_angle()
     t = time.time()
     e = angle_wanted - angle
     delta_e = e - e_old
@@ -169,16 +170,16 @@ def change_angle(cilj):
         if u < -speed_base:
             u = -speed_base
 
-        leftWheel.run_forever(speed_sp= -u)
-        rightWheel.run_forever(speed_sp= u)
+        leftWheel.run_forever(speed_sp= u)
+        rightWheel.run_forever(speed_sp= -u)
 
         angle = read_angle()
 
         # t = time.time()
         # debug_print(angle," ",t)
-        if angle == -cilj:
-           # stop_motors()
-           # break
+        if angle == cilj:
+           stop_motors()
+           break
            counter += 1
         else:
             counter = 0
@@ -191,10 +192,11 @@ def change_angle(cilj):
 def drive_cm(cm):
     global ev3Facing
     debug_print("peljem naprej za ", cm, "cm")
-    speed_base = 200
+    speed_base = 300
     reset_for_pid()
     leftWheel.position = 0
     # rightWheel.position = 0
+    running = False
 
     while True:
         u = pid(8,1,0,ev3Facing) #pid(8,1,0,0)
@@ -205,13 +207,34 @@ def drive_cm(cm):
             u = -speed_base
 
         # mogoce le nastavi speed brez se enega klica run_forever
-        leftWheel.run_forever(speed_sp=speed_base - u)
-        rightWheel.run_forever(speed_sp=speed_base + u)
+        if(running):
+            leftWheel.speed_sp = speed_base + u
+            rightWheel.speed_sp = speed_base - u
+        else:
+            leftWheel.run_forever(speed_sp=speed_base + u)
+            rightWheel.run_forever(speed_sp=speed_base - u)
 
         if abs(leftWheel.position * wheelCirc/3.60) > abs(cm):
             stop_motors()
             break
 
+
+def optimize_angle(wanted, current):
+    mod = 90
+    if current < 0:
+        mod = -90
+    rounded = current % mod
+    current -= rounded
+    added = int(current / 360) * 360
+    minimized = current % 360
+    distance = wanted - minimized
+    result = wanted + added
+    if distance < -180:
+        return (result + 360)
+    elif distance > 180:
+        return (result - 360)
+    else:
+        return result
 
 # go to coordinates of person
 def robot_go_to(person):
@@ -233,14 +256,18 @@ def robot_go_to(person):
     # rotate for appropriate y direction
     if moveY > 0: # person is to the south
         debug_print("tarca je proti jugu")
-        ev3Facing = -90
+        ev3Facing = 90
     
     if moveY < 0: # person is to the north
         debug_print("tarca je proti severu")
-        ev3Facing = 90
+        ev3Facing = 270
 
     if moveY != 0:
+        debug_print("optimiziraj ", ev3Facing)
+        ev3Facing = optimize_angle(ev3Facing,angle)
+        debug_print("sem na kotu ", angle, " in zelim biti na ", ev3Facing)
         change_angle(ev3Facing)
+        angle = read_angle()
 
     print("kot2: ", read_angle())
 
@@ -268,6 +295,9 @@ def robot_go_to(person):
         ev3Facing = 0
 
     if moveX != 0:
+        debug_print("optimiziraj ", ev3Facing)
+        ev3Facing = optimize_angle(ev3Facing,angle)
+        debug_print("sem na kotu ", angle, " in zelim biti na ", ev3Facing)
         change_angle(ev3Facing)
 
     print("kot4:", read_angle())
@@ -286,12 +316,16 @@ def robot_go_to(person):
         else:
             ev3x = ev3x + 10
     """
+    debug_print("sem na cilju [",ev3x,",",ev3y,"] obrnjen proti ",ev3Facing)
 
 
 # go rescue all people
 def go_rescue():
     while saving:
-        person = saving.pop()
+        saving.sort(key = lambda p: math.sqrt((p[0] - ev3x)**2 + (p[1] - ev3y)**2))
+        debug_print("Seznam: ", saving)
+        time.sleep( 10 )
+        person = saving.pop(0)
 
         robot_go_to(person)
 
@@ -314,12 +348,15 @@ def main():
     reset_gyro()
     read_map()
 
-    leftWheel.ramp_up_sp = 2500
-    rightWheel.ramp_up_sp = 2500
+    leftWheel.ramp_up_sp = 4500
+    rightWheel.ramp_up_sp = 4500
 
     debug_print("----------RESUJEM---------")
+    # drive_cm(160)
     go_rescue()
     robot_go_to(start)
+    ev3Facing = 0
+    change_angle(ev3Facing)
 
 
 if __name__ == '__main__':
