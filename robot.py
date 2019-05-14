@@ -72,7 +72,7 @@ def reset_gyro():
 def read_color():
     col = color.value()
     print("Barva: ", col)
-    debug_print("Barva: ", col)
+    # debug_print("Barva: ", col)
     return col
 
 
@@ -133,7 +133,7 @@ def pid(Kp, Ki, Kd, angle_wanted):
     t_old = t
     integral += e * delta_t
 
-    #debug_print(angle," ",e," ",t)
+    # debug_print(angle," ",t)
 
     return u
 
@@ -199,7 +199,7 @@ def drive_cm(cm):
     running = False
 
     while True:
-        u = pid(8,1,0,ev3Facing) #pid(8,1,0,0)
+        u = pid(5,0,0,ev3Facing) #pid(8,1,0,0)
 
         if u > speed_base:
             u = speed_base
@@ -324,7 +324,7 @@ def go_rescue():
     while saving:
         saving.sort(key = lambda p: math.sqrt((p[0] - ev3x)**2 + (p[1] - ev3y)**2))
         debug_print("Seznam: ", saving)
-        time.sleep( 10 )
+        # time.sleep( 10 )
         person = saving.pop(0)
 
         robot_go_to(person)
@@ -334,15 +334,26 @@ def go_rescue():
             debug_print("Rescue this one")
             robot_go_to(start)
         else:
-            debug_print("Dead")
+            debug_print("Dead ", color)
 
-        
+
+def test_pid():
+    reset_gyro()
+    drive_cm(50)
+    debug_print("Zavijam za 180")
+    reset_gyro()
+    time.sleep(1)
+    ev3Facing = 180
+    change_angle(ev3Facing)
+
+
 # The main function of our program'
 def main():
     # set the console just how we want it
     reset_console()
     set_cursor(OFF)
     set_font('Lat15-Terminus24x12')
+    # return test_pid()
     print("executing program")
 
     reset_gyro()
@@ -352,7 +363,7 @@ def main():
     rightWheel.ramp_up_sp = 4500
 
     debug_print("----------RESUJEM---------")
-    # drive_cm(160)
+
     go_rescue()
     robot_go_to(start)
     ev3Facing = 0
