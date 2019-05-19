@@ -20,6 +20,7 @@ position = None
 start = None
 saving = []
 wheelCirc = 0.17593 # in meters
+drivingDirection = 1
 
 integral = 0
 e_old = 0
@@ -72,7 +73,7 @@ def reset_gyro():
 def read_color():
     col = color.value()
     print("Barva: ", col)
-    # debug_print("Barva: ", col)
+    debug_print("Barva: ", col)
     return col
 
 
@@ -93,6 +94,10 @@ def read_map():
     saving.append(data["oseba2"])
     saving.append(data["oseba3"])
     saving.append(data["oseba4"])
+    saving.append(data["oseba5"])
+    saving.append(data["oseba6"])
+    saving.append(data["oseba7"])
+    saving.append(data["oseba8"])
     debug_print(data)
     #map ni na voljo, naredi svoj primer
     
@@ -178,8 +183,6 @@ def change_angle(cilj):
         # t = time.time()
         # debug_print(angle," ",t)
         if angle == cilj:
-           stop_motors()
-           break
            counter += 1
         else:
             counter = 0
@@ -191,15 +194,16 @@ def change_angle(cilj):
 # going forward for cm
 def drive_cm(cm):
     global ev3Facing
+    global drivingDirection
     debug_print("peljem naprej za ", cm, "cm")
-    speed_base = 300
+    speed_base = 200
     reset_for_pid()
     leftWheel.position = 0
     # rightWheel.position = 0
     running = False
 
     while True:
-        u = pid(5,0,0,ev3Facing) #pid(8,1,0,0)
+        u = pid(10,5,1,ev3Facing) #pid(8,1,0,0)
 
         if u > speed_base:
             u = speed_base
@@ -208,11 +212,12 @@ def drive_cm(cm):
 
         # mogoce le nastavi speed brez se enega klica run_forever
         if(running):
-            leftWheel.speed_sp = speed_base + u
-            rightWheel.speed_sp = speed_base - u
+            leftWheel.speed_sp = ((speed_base + u) * drivingDirection)
+            rightWheel.speed_sp = ((speed_base - u) * drivingDirection)
         else:
-            leftWheel.run_forever(speed_sp=speed_base + u)
-            rightWheel.run_forever(speed_sp=speed_base - u)
+            leftWheel.run_forever(speed_sp=((speed_base + (u*drivingDirection)) * drivingDirection))
+            rightWheel.run_forever(speed_sp=((speed_base - (u * drivingDirection)) * drivingDirection))
+            # running = True
 
         if abs(leftWheel.position * wheelCirc/3.60) > abs(cm):
             stop_motors()
@@ -220,21 +225,35 @@ def drive_cm(cm):
 
 
 def optimize_angle(wanted, current):
+    global drivingDirection
+    drivingDirection = 1
     mod = 90
     if current < 0:
         mod = -90
+    current = round(current,-1) 
     rounded = current % mod
     current -= rounded
-    added = int(current / 360) * 360
     minimized = current % 360
     distance = wanted - minimized
-    result = wanted + added
-    if distance < -180:
-        return (result + 360)
+    if abs(distance) == 180:
+        drivingDirection *= -1
+        debug_print("Spreminjam drivingDirection v ", drivingDirection)
+        return current
     elif distance > 180:
-        return (result - 360)
+        debug_print("+90")
+        if(current > 360):
+            drivingDirection *= -1
+            return (current + 90)
+        return (current - 90)
+    elif distance < -180:
+        debug_print("-90")
+        if(current < -360):
+            drivingDirection *= -1
+            return (current - 90)
+        return (current + 90)
     else:
-        return result
+        debug_print("distance ", distance, wanted, minimized)
+        return (current + distance)
 
 # go to coordinates of person
 def robot_go_to(person):
@@ -330,21 +349,40 @@ def go_rescue():
         robot_go_to(person)
 
         color = read_color()
-        if color == 3 or color == 5 or color == 2: # alive or damaged
+        if color == 2: # modra
+            ev3.Sound.tone(1500,1000).wait()
+        if color == 7: # rumena
+            ev3.Sound.tone(1500,1000).wait()
+            time.sleep(1)
+            ev3.Sound.tone(1500,1000).wait()
+        if color == 3 or color == 7 or color == 2: # alive or damaged
             debug_print("Rescue this one")
             robot_go_to(start)
+            ev3.Sound.tone(1500,2000).wait()
         else:
+            if color == 5:
+                ev3.Sound.tone(1500,1000).wait()
+                time.sleep(1)
+                ev3.Sound.tone(1500,1000).wait()
+                time.sleep(1)
+                ev3.Sound.tone(1500,1000).wait()
             debug_print("Dead ", color)
 
 
 def test_pid():
     reset_gyro()
     drive_cm(50)
+    angle = read_angle()
+    t = time.time()
+    debug_print(angle," ",t)
     debug_print("Zavijam za 180")
     reset_gyro()
     time.sleep(1)
     ev3Facing = 180
     change_angle(ev3Facing)
+    t = time.time()
+    angle = read_angle()
+    debug_print(angle," ",t)
 
 
 # The main function of our program'
@@ -363,6 +401,19 @@ def main():
     rightWheel.ramp_up_sp = 4500
 
     debug_print("----------RESUJEM---------")
+    # ev3.Sound.tone(1500,2000).wait()
+    # global ev3Facing
+    # global drivingDirection
+    # drivingDirection = -1
+    # i = 0
+    # while(True):
+    #     i += 1
+    #     drive_cm(40)
+    #     ev3Facing -= 986;
+    #     change_angle(ev3Facing)
+    #     print(read_angle())
+    #     debug_print(read_angle())
+
 
     go_rescue()
     robot_go_to(start)
