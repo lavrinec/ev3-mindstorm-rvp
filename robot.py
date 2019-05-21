@@ -7,6 +7,7 @@ import ev3dev.ev3 as ev3
 from urllib.request import urlopen
 import json
 import math
+from threading import Thread
 
 # state constants
 ON = True
@@ -25,11 +26,14 @@ drivingDirection = 1
 integral = 0
 e_old = 0
 t_old = time.time()
+rescuing = None
 
 # robot position on the grid
 ev3x = 0
 ev3y = 0
 ev3Facing = 0 # north, south, east, west orientation
+falling = 0
+missed = False
 
 # Print debug messages to stderr
 def debug_print(*args, **kwargs):
@@ -150,7 +154,7 @@ def stop_motors():
     rightWheel.stop(stop_action='hold')
     time.sleep(0.5)
     # reset_gyro()
-    time.sleep(0)
+    # time.sleep(0)
 
 
 # turning left or right
@@ -195,13 +199,13 @@ def change_angle(cilj):
 def drive_cm(cm):
     global ev3Facing
     global drivingDirection
+    global missed
     debug_print("peljem naprej za ", cm, "cm")
     speed_base = 200
     reset_for_pid()
     leftWheel.position = 0
     # rightWheel.position = 0
     running = False
-
     while True:
         u = pid(10,5,1,ev3Facing) #pid(8,1,0,0)
 
@@ -219,9 +223,19 @@ def drive_cm(cm):
             rightWheel.run_forever(speed_sp=((speed_base - (u * drivingDirection)) * drivingDirection))
             # running = True
 
-        if abs(leftWheel.position * wheelCirc/3.60) > abs(cm):
+        distance = abs(leftWheel.position * wheelCirc/3.60)
+
+        if missed:
+            if distance < 8:
+                if colorize(False):
+                    return False
+            else:
+                missed = False
+
+
+        if distance > abs(cm):
             stop_motors()
-            break
+            return True
 
 
 def optimize_angle(wanted, current):
@@ -241,13 +255,13 @@ def optimize_angle(wanted, current):
         return current
     elif distance > 180:
         debug_print("+90")
-        if(current > 360):
+        if(current > 180):
             drivingDirection *= -1
             return (current + 90)
         return (current - 90)
     elif distance < -180:
         debug_print("-90")
-        if(current < -360):
+        if(current < -180):
             drivingDirection *= -1
             return (current - 90)
         return (current + 90)
@@ -260,6 +274,7 @@ def robot_go_to(person):
     global ev3x
     global ev3y
     global ev3Facing
+    global falling
 
     debug_print("sem na [",ev3x,",",ev3y,"] obrnjen proti ",ev3Facing)
     debug_print("tarca je na ",person)
@@ -284,6 +299,10 @@ def robot_go_to(person):
     if moveY != 0:
         debug_print("optimiziraj ", ev3Facing)
         ev3Facing = optimize_angle(ev3Facing,angle)
+        if(ev3Facing + 5 < angle):
+            falling += 1
+            if(falling % 2 == 0):
+                ev3Facing -= 1
         debug_print("sem na kotu ", angle, " in zelim biti na ", ev3Facing)
         change_angle(ev3Facing)
         angle = read_angle()
@@ -291,8 +310,11 @@ def robot_go_to(person):
     print("kot2: ", read_angle())
 
     # move square by square in y direction
-    ev3y += moveY
-    drive_cm(abs(moveY))
+    
+    if drive_cm(abs(moveY)):
+        ev3y += moveY
+    else:
+        return
     print("kot3:", read_angle())
     """
     for y in range(0, int(abs(moveY)/10)):
@@ -316,14 +338,19 @@ def robot_go_to(person):
     if moveX != 0:
         debug_print("optimiziraj ", ev3Facing)
         ev3Facing = optimize_angle(ev3Facing,angle)
+        if(ev3Facing + 5 < angle):
+            falling += 1
+            if(falling % 2 == 0):
+                ev3Facing -= 1
         debug_print("sem na kotu ", angle, " in zelim biti na ", ev3Facing)
         change_angle(ev3Facing)
 
     print("kot4:", read_angle())
 
     # move square by square in x direction
-    ev3x += moveX
-    drive_cm(abs(moveX))
+    
+    if drive_cm(abs(moveX)):
+        ev3x += moveX
 
     print("kot5:", read_angle())
     """
@@ -337,36 +364,57 @@ def robot_go_to(person):
     """
     debug_print("sem na cilju [",ev3x,",",ev3y,"] obrnjen proti ",ev3Facing)
 
+def dead_beep():
+    ev3.Sound.tone(1500,1000).wait()
+    time.sleep(0.5)
+    ev3.Sound.tone(1500,1000).wait()
+    time.sleep(0.5)
+    ev3.Sound.tone(1500,1000).wait()
+
+def colorize(set_missed):
+    global missed
+    color = read_color()
+    if color == 2: # modra
+        stop_motors()
+        if missed and not set_missed:
+            saving.append(rescuing)
+        missed = False
+        ev3.Sound.tone(1500,1000).wait()
+    if color == 7: # rumena
+        stop_motors()
+        if missed and not set_missed:
+            saving.append(rescuing)
+        missed = False
+        ev3.Sound.tone(1500,1000).wait()
+        time.sleep(1)
+        ev3.Sound.tone(1500,1000).wait()
+    if color == 3 or color == 7 or color == 2: # alive or damaged
+        debug_print("Rescue this one")
+        robot_go_to(start)
+        ev3.Sound.tone(1500,2000).wait()
+        return True
+    else:
+        if color == 5:
+            missed = False
+            thread = Thread(target = dead_beep)
+            thread.start()
+        elif set_missed:
+            missed = True
+        debug_print("Dead ", color)
+        return False
 
 # go rescue all people
 def go_rescue():
+    global rescuing
     while saving:
         saving.sort(key = lambda p: math.sqrt((p[0] - ev3x)**2 + (p[1] - ev3y)**2))
         debug_print("Seznam: ", saving)
         # time.sleep( 10 )
-        person = saving.pop(0)
+        rescuing = saving.pop(0)
 
-        robot_go_to(person)
+        robot_go_to(rescuing)
 
-        color = read_color()
-        if color == 2: # modra
-            ev3.Sound.tone(1500,1000).wait()
-        if color == 7: # rumena
-            ev3.Sound.tone(1500,1000).wait()
-            time.sleep(1)
-            ev3.Sound.tone(1500,1000).wait()
-        if color == 3 or color == 7 or color == 2: # alive or damaged
-            debug_print("Rescue this one")
-            robot_go_to(start)
-            ev3.Sound.tone(1500,2000).wait()
-        else:
-            if color == 5:
-                ev3.Sound.tone(1500,1000).wait()
-                time.sleep(1)
-                ev3.Sound.tone(1500,1000).wait()
-                time.sleep(1)
-                ev3.Sound.tone(1500,1000).wait()
-            debug_print("Dead ", color)
+        colorize(True)
 
 
 def test_pid():
